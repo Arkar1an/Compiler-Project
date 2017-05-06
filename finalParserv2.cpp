@@ -47,6 +47,7 @@ void loadFile(vector<string>& wordsToCheck,
 		index++;
 	}
 }
+
 // checks whether words are a known identifier, special char, or a number
 int wordChecker(string currentWord,
 	vector<string> reservedWords,
@@ -159,6 +160,7 @@ int stateEvaluator(string c, bool &error){
 	}
 	else{
 		error = true;
+		return -1;
 	}
 }
 
@@ -253,6 +255,7 @@ int termEvaluator(string c, bool &error){
 	}
 	else{
 		error = true;
+		return -1;
 	}
 
 }
@@ -270,7 +273,7 @@ void printStack(stack<string> theStack){
 	cout << endl;
 }
 
-// num corresponds to the arbitrary numbers in the table.
+// num corresponds to the numbers used in a spreadsheet.
 // corresponding rule is then pushed in reverse order.
 void stackPusher(bool &error, int num, stack<string> &theStack){
 	if (error){
@@ -469,7 +472,7 @@ void eCodeCheck(int eCode){
 		cout << "',' is missing..." << endl;
 	}
 	else if (eCode == 8){
-		cout << "'.' is missing..." << endl;//doesnt get used i combined . with END
+		cout << "'.' is missing..." << endl;
 	}
 	else if (eCode == 9){
 		cout << "'(' is missing..." << endl;
@@ -482,6 +485,39 @@ void eCodeCheck(int eCode){
 	}
 	else if (eCode == 12){
 		cout << "Illegal expression..." << endl;
+	}
+}
+
+// This checks the stack to find out why code was rejected
+// calls eCodeCheck to issue error to terminal
+void stackCheck(int row, int col, stack<string> theStack){
+	stack<string> tmp = theStack;
+	while(!tmp.empty()){
+		if(tmp.top() == "<prog>"){
+			eCodeCheck(1);
+			break;
+		}
+		else if(tmp.top() == ";"){
+			eCodeCheck(6);
+			break;
+		}
+		else if (tmp.top() == "<dec-list>"){
+			eCodeCheck(4);
+			break;
+		}
+		else if (tmp.top() == "<A>"){
+			eCodeCheck(7);
+			break;
+		}
+		else if (tmp.top() == "<stat-list>"){
+			eCodeCheck(2);
+			break;
+		}
+		else if(tmp.top() == "<B>"){
+			eCodeCheck(6);
+			break;
+		}
+		tmp.pop();
 	}
 }
 
@@ -520,19 +556,19 @@ int main(){
 	vector<string> special = {";", ":", ",", "+", "-", "*", "/", "(", ")", "="};
 	vector<string> followOfIdentifier = {";",",","=",")","*","/","+","-"};
 	vector<string> knownIdentifier;
+	stack<string> parentheses;
 	string statement;
 	int eCode, col, row;
 	bool error = false;
 	loadFile(wordsInStatement,knownIdentifier);
 
 	//identifies invalid identifiers and creates tokens of all non reserved words
-	//i will probably remove this and try to get parsing by word working...
 	for(int i = 0; i < wordsInStatement.size(); i++){
 		eCode = wordChecker(wordsInStatement[i],reservedWords,special,knownIdentifier);
 		bool reserved = false;
 		if(eCode == 5){
 			eCodeCheck(eCode);
-			error = true;
+			//error = true;
 			break;
 		}
 		for(int j = 0; j < reservedWords.size(); j++){
@@ -545,6 +581,19 @@ int main(){
 			if(wordsInStatement[i] == special[j]){
 				tokensInStatement.push_back(wordsInStatement[i]);
 				reserved = true;
+				if (wordsInStatement[i] == "("){
+					parentheses.push("(");
+				}
+				if (wordsInStatement[i] == ")"){
+					if (parentheses.empty()){
+						//error no corresponding "("
+						error = true;
+						eCodeCheck(9);
+					}
+					else{
+						parentheses.pop();
+					}
+				}
 			}
 		}
 		//not special or reserved so should be identifier or number
@@ -552,13 +601,20 @@ int main(){
 			for(int j = 0; j < wordsInStatement[i].length(); j++){
 				tokensInStatement.push_back(string(1,wordsInStatement[i][j]));
 			}
+			//pushes a delimiter to identify end of id or number
 			tokensInStatement.push_back("|");
 		}
 	}
-
+	if(!parentheses.empty()){
+		//error no corresponding ")"
+		error = true;
+		eCodeCheck(10);
+	}
 	stack<string> theStack;
-	theStack.push("<prog>");
-	printStack(theStack);
+	if(!error){
+		theStack.push("<prog>");
+		printStack(theStack);
+	}
 
 	//parsing begins here with each token in the statement
 	for (int i = 0; i < tokensInStatement.size(); i++){
@@ -598,8 +654,10 @@ int main(){
 			theStack.pop();
 		}
 	}
-	if (error){
+	if (error || !theStack.empty()){
 		cout << "Rejected" << endl;
+		//call stackCheck to issue error
+		stackCheck(row,col,theStack);
 	}
 	else {
 		cout << "Accepted" << endl;
