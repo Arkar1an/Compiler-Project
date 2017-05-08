@@ -490,35 +490,107 @@ void eCodeCheck(int eCode){
 
 // This checks the stack to find out why code was rejected
 // calls eCodeCheck to issue error to terminal
-void stackCheck(int row, int col, stack<string> theStack){
+// stackCheck1 checks for grammatical errors
+// if reserved word BEGIN is missing, this is called
+void stackCheck1(int row, int col, stack<string> theStack, int lastIndex, vector<string> tokensInStatement){
 	stack<string> tmp = theStack;
-	while(!tmp.empty()){
-		if(tmp.top() == "<prog>"){
-			eCodeCheck(1);
-			break;
-		}
-		else if(tmp.top() == ";"){
-			eCodeCheck(6);
-			break;
-		}
-		else if (tmp.top() == "<dec-list>"){
-			eCodeCheck(4);
-			break;
+	if (tmp.top() == "<stat-list>"){
+		eCodeCheck(2);
+	}
+	else if(tmp.top() == "END."){
+		eCodeCheck(12);
+	}
+	else if(tmp.top() == ")"){
+		eCodeCheck(12);
+	}
+	else{
+		while(!tmp.empty()){
+		if(tmp.top() == ";"){
+			if(tokensInStatement[lastIndex-1] == ")" && tokensInStatement[lastIndex-2] == "("){
+				eCodeCheck(12);
+				break;
+			}
+			else{
+				eCodeCheck(6);
+				break;				
+			}
 		}
 		else if (tmp.top() == "<A>"){
-			eCodeCheck(7);
-			break;
-		}
-		else if (tmp.top() == "<stat-list>"){
-			eCodeCheck(2);
-			break;
+			if(tokensInStatement[lastIndex+1] == "BEGIN"){
+				eCodeCheck(6);
+				break;
+			}
+			else{
+				eCodeCheck(7);
+				break;
+			}
 		}
 		else if(tmp.top() == "<B>"){
 			eCodeCheck(6);
 			break;
 		}
+		else if(tmp.top() == "<expr>" || tmp.top() == "<Y>"){
+			if(tokensInStatement[lastIndex+1] == "PRINT" || tokensInStatement[lastIndex+1] == "END."){
+				if(tokensInStatement[lastIndex-1] == ")" && tokensInStatement[lastIndex-2] == "("){
+					eCodeCheck(12);
+					break;
+				}
+				else{
+					eCodeCheck(6);
+					break;				
+				}
+			}
+			else{
+				bool extraBreak;
+				int temp = lastIndex+1;
+				while(tokensInStatement[temp] != "|"){
+					temp++;
+				}
+				if (tokensInStatement[temp+1] == "="){
+					eCodeCheck(6);
+					break;
+				}
+				else{
+					eCodeCheck(12);
+					break;
+				}
+			}
+		}
 		tmp.pop();
+		}
 	}
+}
+
+// This checks the stack to find out why code was rejected
+// calls eCodeCheck to issue error to terminal
+// stackCheck2 checks for identifier or reserved word errors
+void stackCheck2(int row, int col, stack<string> theStack, int lastIndex, vector<string> tokensInStatement,string afterUnknownID){
+	stack<string> tmp = theStack;
+		if(tmp.top() == "<prog>"){
+			eCodeCheck(1);
+		}
+		else if (tmp.top() == "<dec-list>"){
+			eCodeCheck(4);
+		}
+		else if (tmp.top() == "BEGIN"){
+			if(tokensInStatement[tokensInStatement.size()-1] == ":"){
+				eCodeCheck(4);
+			}
+			else{
+				eCodeCheck(2);
+			}
+		}
+		else if(tmp.top() == "<B>"){
+			if(afterUnknownID == "("){
+				eCodeCheck(11);
+			}
+			else{
+				eCodeCheck(5);
+			}
+		}
+		else{
+			eCodeCheck(5);
+		}
 }
 
 int main(){
@@ -553,22 +625,23 @@ int main(){
 	vector<string> wordsInStatement;
 	vector<string> tokensInStatement;
 	vector<string> reservedWords = {"PROGRAM", "BEGIN", "INTEGER", "PRINT", "END."};
-	vector<string> special = {";", ":", ",", "+", "-", "*", "/", "(", ")", "="};
+	vector<string> special = {";", ":", ",", "+", "-", "*", "/", "(", ")", "=","."};
 	vector<string> followOfIdentifier = {";",",","=",")","*","/","+","-"};
 	vector<string> knownIdentifier;
 	stack<string> parentheses;
-	string statement;
+	string statement,afterUnknownID;
 	int eCode, col, row;
 	bool error = false;
 	loadFile(wordsInStatement,knownIdentifier);
+	bool idError = false;
 
 	//identifies invalid identifiers and creates tokens of all non reserved words
 	for(int i = 0; i < wordsInStatement.size(); i++){
 		eCode = wordChecker(wordsInStatement[i],reservedWords,special,knownIdentifier);
 		bool reserved = false;
 		if(eCode == 5){
-			eCodeCheck(eCode);
-			//error = true;
+			idError = true;
+			afterUnknownID = wordsInStatement[i+1];//verify this works
 			break;
 		}
 		for(int j = 0; j < reservedWords.size(); j++){
@@ -605,20 +678,23 @@ int main(){
 			tokensInStatement.push_back("|");
 		}
 	}
-	if(!parentheses.empty()){
+	if(!idError && !parentheses.empty()){
 		//error no corresponding ")"
 		error = true;
 		eCodeCheck(10);
 	}
+	
+	
 	stack<string> theStack;
 	if(!error){
 		theStack.push("<prog>");
 		printStack(theStack);
 	}
-
+	int lastIndex = 0;
 	//parsing begins here with each token in the statement
 	for (int i = 0; i < tokensInStatement.size(); i++){
 		if(error){
+			lastIndex = i;
 			break;
 		}
 		//this marks the end of an identifier or number
@@ -635,6 +711,7 @@ int main(){
 			}
 			if(followError){
 				//figure out the error based on the stack?
+				lastIndex = i;
 				error = true;
 				break;
 			}
@@ -654,10 +731,31 @@ int main(){
 			theStack.pop();
 		}
 	}
+	//this checks whether END. and . are present
+	//currently unkown identifiers can be mixed up with misspelled reserved words...
+	int size, length;
+	size = wordsInStatement.size()-1;
+	bool endError = false;
+	if (wordsInStatement[size] != "END."){
+		error = true;
+		endError = true;
+	}
 	if (error || !theStack.empty()){
 		cout << "Rejected" << endl;
 		//call stackCheck to issue error
-		stackCheck(row,col,theStack);
+		if(!endError){
+			if(idError){
+				//identifier or reserved word error check
+				stackCheck2(row,col,theStack,lastIndex,tokensInStatement,afterUnknownID);
+			}
+			else{
+				//grammatical error check
+				stackCheck1(row,col,theStack,lastIndex,tokensInStatement);
+			}
+		}
+		else{
+			eCodeCheck(3);
+		}
 	}
 	else {
 		cout << "Accepted" << endl;
