@@ -636,7 +636,7 @@ int main(){
 	bool idError = false;
 
 	//identifies invalid identifiers and creates tokens of all non reserved words
-	for(int i = 0; i < wordsInStatement.size(); i++){
+	for(int i = 0; i < wordsInStatement.size()-1; i++){
 		eCode = wordChecker(wordsInStatement[i],reservedWords,special,knownIdentifier);
 		bool reserved = false;
 		if(eCode == 5){
